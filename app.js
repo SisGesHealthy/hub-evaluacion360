@@ -81,7 +81,7 @@
 
   const confBase = () => ({
     ciclo: { id: '2026', nombre: 'Evaluación 360 · 2026', inicio: '2026-11-16', cierre: '2026-12-11',
-      pares: false, maxPares: 2, colaboradores: false, anonimo: true, aCiegas: true, seguimiento: [30, 60, 90] },
+      pares: false, maxPares: 2, colaboradores: false, anonimo: true, jefeVeAuto: true, seguimiento: [30, 60, 90] },
     cargos: {},
     personas: clon(window.HUB_PERSONAS || CFG.personas || []),
     campos: clon(CAMPOS_BASE),
@@ -172,6 +172,9 @@
     else etapa = 'Por iniciar';
     return { auto, jefe, otras, otrasEnv, ac, hitos, listoAcuerdo, etapa, clase };
   }
+  // El jefe trabaja sobre lo que escribió el evaluado: ve su respuesta en cada pregunta y la particulariza.
+  const jefeVeAuto = () => CONF.ciclo.jefeVeAuto !== false;
+  const autoParaJefe = () => (R && R.rol === 'jefe' && jefeVeAuto()) ? resp(R.ev.id, 'auto', R.ev.id) : null;
   const pillEstado = r => !r ? '<span class="pill">Sin iniciar</span>' : enviado(r) ? '<span class="pill ok">Enviada</span>' : '<span class="pill borr">Borrador</span>';
 
   // ---------- Almacenamiento ----------
@@ -467,7 +470,7 @@
     let cta, href;
     if (e.ac && (e.ac.estado === 'cerrado' || e.ac.estado === 'confirmado')) { cta = 'Ver ficha y seguimiento'; href = `#/ficha/${ev.id}`; }
     else if (e.listoAcuerdo) { cta = e.ac ? 'Continuar la conversación' : 'Abrir sala de acuerdo'; href = `#/acuerdo/${ev.id}`; }
-    else if (!enviado(r)) { cta = r ? 'Continuar tu evaluación' : 'Evaluar'; href = `#/r/${ev.id}/jefe`; }
+    else if (!enviado(r)) { cta = r ? 'Continuar tu evaluación' : jefeVeAuto() && !enviado(e.auto) ? 'Evaluar (aún sin su autoevaluación)' : 'Evaluar sobre su autoevaluación'; href = `#/r/${ev.id}/jefe`; }
     else { cta = 'Ver tu evaluación'; href = `#/r/${ev.id}/jefe`; }
     const paso = (ok, b, t, txt) => `<i class="${ok ? 'ok' : b ? 'b' : ''}" title="${t}">${ok ? '✓' : txt}</i>`;
     return `<a class="tarjeta tarea ${e.listoAcuerdo && !e.ac ? 'destacada' : ''}" href="${href}">
@@ -506,7 +509,7 @@
       </section>
       ${miFicha ? `<div class="titulo-sec"><h2>Tu ficha acordada</h2><a href="#/ficha/${YO.id}">Ver completa y seguimiento →</a></div>
         <a href="#/ficha/${YO.id}" style="text-decoration:none;color:inherit">${ac.estado === 'cerrado' ? '<p class="pill info sin" style="margin:0 0 10px">Tu jefe cerró el acuerdo: falta tu confirmación</p>' : ''}${fichaHTML(YO, ac.campos, { final: true })}</a>` : ''}
-      ${t.auto && !miFicha ? `<div class="titulo-sec"><h2>Tu evaluación</h2><span class="sub">Solo tú la ves hasta que la envíes${CONF.ciclo.aCiegas && YO.jefe ? ' y tu jefe envíe la suya' : ''}</span></div><div class="tareas">${tarjetaTarea(t.auto)}</div>` : ''}
+      ${t.auto && !miFicha ? `<div class="titulo-sec"><h2>Tu evaluación</h2><span class="sub">${YO.jefe && jefeVeAuto() ? 'Cuando la envíes, tu jefe la verá para hacer la suya sobre tus respuestas' : 'Solo tú la ves hasta que la envíes'}</span></div><div class="tareas">${tarjetaTarea(t.auto)}</div>` : ''}
       ${equipo.length ? `<div class="titulo-sec"><h2>Tu equipo</h2><span class="sub">${equipo.length} persona${equipo.length > 1 ? 's' : ''} a cargo</span></div><div class="tareas">${equipo.map(tarjetaEquipo).join('')}</div>` : ''}
       ${t.otras.length ? `<div class="titulo-sec"><h2>Miradas 360 que te pidieron</h2><span class="sub">${CONF.ciclo.anonimo ? 'Se muestran sin tu nombre' : ''}</span></div><div class="tareas">${t.otras.map(tarjetaTarea).join('')}</div>` : ''}
       ${!lista.length && !equipo.length && !miFicha ? '<div class="tarjeta vacio"><div class="grande">🌱</div><p>No tienes evaluaciones pendientes en este ciclo.</p></div>' : ''}`;
@@ -519,7 +522,8 @@
     if (!ev || !ROLES[rol]) return sinPermiso();
     const evaluadorId = evalId || (YO && YO.id);
     const propio = YO && evaluadorId === YO.id && fuentesDe(ev).some(f => f.rol === rol && f.evaluador === YO.id);
-    if (!propio && !esAdmin()) return sinPermiso();
+    const jefeLee = YO && ev.jefe === YO.id && rol === 'auto' && jefeVeAuto() && enviado(resp(ev.id, 'auto', ev.id));
+    if (!propio && !esAdmin() && !jefeLee) return sinPermiso();
     const existente = resp(ev.id, rol, evaluadorId);
     if (!propio || enviado(existente)) return vRespuestaLectura(ev, rol, evaluadorId, existente);
     const reg = existente ? clon(existente) : nuevoRegistro('respuesta', ev.id, rol, evaluadorId);
@@ -572,7 +576,9 @@
         <input class="entrada" data-acc="${k}" value="${esc(x)}" placeholder="${k === 0 ? 'Ej.: Definir plan de digitalización con hitos y responsables' : 'Otra acción (opcional)'}"></div>`).join('')}</div>`;
     } else if (c.tipo === 'competencias') {
       const o = v || {};
+      const sa = autoParaJefe() && enviado(autoParaJefe()) ? (autoParaJefe().campos[c.id] || {}) : null;
       entrada = cargoDe(R.ev).competencias.map(k => `<div class="comp-item"><b>${esc(k)}</b><p>${esc((MAN.competencias[k] || {}).descripcion || '')}</p>
+        ${sa && String(sa[k] || '').trim() ? `<p style="color:var(--teal)"><b>${esc(primerNombre(R.ev))}:</b> ${esc(sa[k])}</p>` : ''}
         <textarea data-comp="${esc(k)}" placeholder="Un hecho que lo muestre…">${esc(o[k] || '')}</textarea></div>`).join('') || '<p class="sub">Este cargo no tiene competencias registradas en el manual.</p>';
     } else if (c.tipo === 'corto') {
       entrada = `<input class="entrada corta" id="inp" value="${esc(v || '')}" placeholder="Escribe aquí…" autocomplete="off">`;
@@ -583,21 +589,30 @@
     return `<span class="etiqueta-campo" style="color:${color}"><span class="icono-campo" style="background:${color}">${ICONOS[c.color] || '•'}</span>${esc(c.etiqueta)}${c.obligatorio ? '' : ' · opcional'}</span>
       <h2 class="pregunta">${esc(preguntaDe(c, R.rol, R.ev))}</h2>
       <p class="ayuda">${esc(c.ayuda || '')}</p>
+      ${suRespuestaHTML(c)}
       ${entrada}
       ${comps.length ? `<div class="chips" title="Competencias del cargo según el Manual de Funciones">${comps.map(k => `<button class="chip ${sinTildes(v).includes(sinTildes(k)) ? 'on' : ''}" data-chip="${esc(k)}" title="${esc((MAN.competencias[k] || {}).descripcion || '')}">${esc(k)}</button>`).join('')}</div>` : ''}
       <div class="pistas" id="pistas">${pistasHTML(c, v)}</div>
       ${c.ejemplo ? `<details class="ejemplo"><summary>Ver un ejemplo</summary><div>${esc(c.ejemplo).replace(/\n/g, '<br>')}</div></details>` : ''}`;
+  }
+  function suRespuestaHTML(c) {
+    const a = autoParaJefe();
+    if (!a || !enviado(a) || !(camposDe('auto').some(x => x.id === c.id))) return '';
+    const va = a.campos[c.id];
+    const pn = esc(primerNombre(R.ev));
+    return `<div class="su-resp"><small>Lo que escribió ${pn}</small><div>${valorHTML(c, va)}</div>
+      ${!vacio(va) && c.tipo !== 'competencias' ? `<button class="btn sec chico" data-partir="${c.id}">↓ Partir de su respuesta para particularizarla</button>` : ''}</div>`;
   }
   function introHTML() {
     const { ev, rol } = R;
     const c = cargoDe(ev);
     const quien = rol === 'auto' ? 'tu cargo' : `el cargo de ${primerNombre(ev)}`;
     const reglas = rol === 'auto'
-      ? [['A ciegas', CONF.ciclo.aCiegas ? 'Tu jefe no ve tus respuestas hasta que los dos hayan enviado.' : 'Tu jefe verá tus respuestas cuando las envíes.'],
+      ? [['Tu jefe la verá', jefeVeAuto() ? 'Cuando la envíes, tu jefe verá cada respuesta tuya y escribirá la suya sobre ella.' : 'Tu jefe no la verá hasta la sala de acuerdo.'],
         ['Se guarda solo', 'Puedes salir y volver cuando quieras; seguirás donde quedaste.'],
         ['Luego conversan', 'Con las dos miradas, tu jefe abre la sala de acuerdo y cierran juntos tu ficha.']]
       : rol === 'jefe'
-        ? [['A ciegas', CONF.ciclo.aCiegas ? `Verás la autoevaluación de ${primerNombre(ev)} cuando los dos hayan enviado.` : `Puedes comparar con la autoevaluación cuando ${primerNombre(ev)} la envíe.`],
+        ? [['Sobre su respuesta', !jefeVeAuto() ? 'Responde sin ver la autoevaluación.' : enviado(resp(ev.id, 'auto', ev.id)) ? `En cada pregunta verás lo que escribió ${primerNombre(ev)}: puedes partir de su texto y particularizarlo.` : `${primerNombre(ev)} aún no envía su autoevaluación. Te conviene esperar: cuando la envíe, la verás en cada pregunta.`],
           ['Se guarda solo', 'Puedes salir y volver cuando quieras.'],
           ['Después: acuerdo', 'Abrirás la sala de acuerdo para conversar y cerrar la ficha final.']]
         : [['Anónima', CONF.ciclo.anonimo ? `${primerNombre(ev)} y su jefe verán tu respuesta sin tu nombre.` : 'Tu nombre será visible.'],
@@ -609,7 +624,8 @@
       <div class="intro-cargo"><b>${esc(c.nombre)}</b>${c.area ? ` · ${esc(c.area)}` : ''}<br>${esc(c.mision || '')}
         ${c.competencias.length ? `<div class="comps" style="margin-top:10px">${c.competencias.map(k => `<span>${esc(k)}</span>`).join('')}</div>` : ''}
         <div class="chico-txt" style="margin-top:8px">Misión y competencias de ${quien} según el Manual de Funciones.</div></div>
-      <div class="reglas">${reglas.map(([a, b]) => `<div><b>${a}</b>${b}</div>`).join('')}</div>`;
+      <div class="reglas">${reglas.map(([a, b]) => `<div><b>${a}</b>${b}</div>`).join('')}</div>
+      ${autoParaJefe() && enviado(autoParaJefe()) ? `<h3 style="margin:22px 0 10px;font-size:15px">Así llenó ${esc(primerNombre(ev))} su autoevaluación</h3>${fichaHTML(ev, autoParaJefe().campos, { campos: camposDe('auto'), mini: true, titulo: 'Autoevaluación · ' + ev.nombre })}` : ''}`;
   }
   function revisionHTML() {
     const faltan = R.campos.filter(c => c.obligatorio && vacio(R.reg.campos[c.id]));
@@ -681,6 +697,13 @@
       x.onkeydown = e => { if (e.key === 'Enter' && !e.ctrlKey) { e.preventDefault(); const n = $$('[data-acc]')[k + 1]; if (n) n.focus(); } };
     });
     if (accs.length && !inp) accs[Math.max(0, accs.findIndex(x => !x.value.trim()))].focus();
+    $$('[data-partir]').forEach(b => {
+      b.onclick = async () => {
+        const va = autoParaJefe().campos[c.id];
+        if (!vacio(R.reg.campos[c.id]) && !await confirmar('¿Reemplazar tu texto?', 'Se pondrá la respuesta de ' + esc(primerNombre(R.ev)) + ' para que la ajustes.', 'Reemplazar')) return;
+        cambiarValor(c, clon(va)); pintarPaso();
+      };
+    });
     $$('[data-comp]').forEach(t => {
       t.oninput = () => { const o = { ...(R.reg.campos[c.id] || {}) }; o[t.dataset.comp] = t.value; cambiarValor(c, o); };
     });
@@ -1006,6 +1029,16 @@
   }
 
   // ---------- Vista: persona (detalle y trazabilidad) ----------
+  // Ficha del evaluado y ficha del jefe una junto a otra (y la acordada, si existe).
+  function fichasComparadas(ev, e, esJefe) {
+    const ver = r => r && (esAdmin() || enviado(r));
+    const col = (r, rol, titulo) => `<div><div class="fila" style="margin-bottom:8px"><b>${titulo}</b>${pillEstado(r)}${r && r.enviado ? `<span class="chico-txt">${fmtFechaHora(r.enviado)}</span>` : ''}</div>
+      ${ver(r) ? fichaHTML(ev, r.campos, { campos: camposDe(rol), titulo: ev.nombre }) : '<div class="tarjeta vacio">Aún no enviada.</div>'}</div>`;
+    const autoVisible = esAdmin() || (esJefe && jefeVeAuto());
+    return `<div class="titulo-sec"><h2>Fichas: evaluado y jefe</h2><button class="btn sec chico no-imprimir" onclick="window.print()">Imprimir / PDF</button></div>
+      <div class="fichas-par">${autoVisible ? col(e.auto, 'auto', 'Llenada por ' + esc(ev.nombre)) : ''}${ev.jefe ? col(e.jefe, 'jefe', 'Llenada por el jefe · ' + esc((persona(ev.jefe) || {}).nombre || '')) : ''}</div>
+      ${e.ac && e.ac.estado !== 'borrador' ? `<div class="titulo-sec"><h2>Ficha acordada</h2><a href="#/ficha/${ev.id}">Seguimiento →</a></div>${fichaHTML(ev, e.ac.campos, { final: true })}` : ''}`;
+  }
   function vPersona(id) {
     const ev = persona(id);
     if (!ev) return sinPermiso();
@@ -1023,7 +1056,7 @@
       <div class="dos-col" style="margin-top:14px">
         <div class="tarjeta"><div class="filtros"><b>Fuentes de la evaluación</b></div>
           <table class="tabla"><tbody>${fuentes.map(f => { const r = resp(ev.id, f.rol, f.evaluador), q = persona(f.evaluador);
-            const ver = esAdmin() || (esJefe && f.rol === 'jefe');
+            const ver = esAdmin() || (esJefe && (f.rol === 'jefe' || (f.rol === 'auto' && jefeVeAuto() && enviado(r))));
             return `<tr><td><b>${ROLES[f.rol].nombre}</b><br><span class="chico-txt">${anon && f.rol !== 'auto' && f.rol !== 'jefe' ? 'Anónimo' : esc(q ? q.nombre : '')}</span></td><td>${pillEstado(r)}</td>
               <td class="chico-txt">${r && r.enviado ? fmtFechaHora(r.enviado) : ''}</td><td>${ver && r ? `<a class="btn fant chico" href="#/r/${ev.id}/${f.rol}/${f.evaluador}">Ver</a>` : ''}</td></tr>`; }).join('')}
             <tr><td><b>Acuerdo final</b></td><td>${e.ac ? `<span class="pill ${e.ac.estado === 'borrador' ? 'borr' : 'ok'}">${e.ac.estado === 'borrador' ? 'En conversación' : e.ac.estado === 'cerrado' ? 'Cerrado' : 'Confirmado'}</span>` : '<span class="pill">Pendiente</span>'}</td>
@@ -1032,7 +1065,8 @@
           ${esAdmin() && e.ac && e.ac.estado !== 'borrador' ? '<div style="padding:12px 16px"><button class="btn peligro chico" id="reabrir-ac">Reabrir acuerdo</button></div>' : ''}</div>
         <div class="tarjeta"><div class="filtros"><b>Trazabilidad</b><span class="chico-txt">quién hizo qué y cuándo</span></div>
           <div style="padding:16px 20px">${eventos.length ? `<ul class="traza">${eventos.map(h => `<li class="${/Envi|Cerr|Confirm/.test(h.accion) ? 'fuerte' : ''}"><b>${h.anonimo ? 'Anónimo' : esc(h.quien)}</b> · ${esc(h.accion)} <span class="pill sin">${esc(h.tipo)}</span>${h.detalle ? `<br><span class="sub">${esc(h.detalle)}</span>` : ''}<time>${fmtFechaHora(h.t)}</time></li>`).join('')}</ul>` : '<p class="sub">Sin actividad todavía.</p>'}</div></div>
-      </div>`;
+      </div>
+      ${fichasComparadas(ev, e, esJefe)}`;
     const b = $('#reabrir-ac');
     if (b) b.onclick = async () => {
       const motivo = await pedirTexto('Reabrir acuerdo', 'El jefe podrá volver a editarlo en la sala de acuerdo. La confirmación y el seguimiento se conservan en el historial.', 'Motivo');
@@ -1089,7 +1123,7 @@
       ${[['pares', 'Pares', 'Compañeros con el mismo jefe que también participan (p. ej., las jefaturas que reportan a Gerencia General).'],
         ['colaboradores', 'Colaboradores', 'Las personas a cargo del evaluado (según el organigrama) responden una mirada corta.'],
         ['anonimo', 'Miradas 360 anónimas', 'El evaluado y su jefe ven las respuestas de pares y colaboradores sin nombre. Talento Humano sí ve quién respondió.'],
-        ['aCiegas', 'Evaluación a ciegas', 'El jefe no ve la autoevaluación (ni al revés) hasta que los dos hayan enviado. Evita respuestas "copiadas".']]
+        ['jefeVeAuto', 'El jefe evalúa sobre la autoevaluación', 'En cada pregunta el jefe ve lo que escribió el evaluado y puede partir de su texto para particularizarlo. Si se apaga, el jefe responde sin verla.']]
         .map(([k, t, d]) => `<div class="cargo-fila">${interruptor(`data-ciclo-b="${k}"`, c[k])}<div class="info"><b>${t}</b><span class="sub">${d}</span></div></div>`).join('')}
       ${carga()}</div>`;
   }
@@ -1269,7 +1303,7 @@
   const cargarScript = src => new Promise(res => { const s = document.createElement('script'); s.src = src; s.onload = s.onerror = () => res(); document.head.appendChild(s); });
   async function iniciar() {
     try {
-      await Promise.all([cargarScript('datos-manual.js?v=6'), cargarScript('datos-personas.js?v=6')]);
+      await Promise.all([cargarScript('datos-manual.js?v=8'), cargarScript('datos-personas.js?v=8')]);
       MAN = window.HUB_MANUAL || MAN;
       if (DEMO) {
         if (!(window.HUB_PERSONAS || []).length) {

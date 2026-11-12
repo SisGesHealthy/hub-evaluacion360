@@ -1,5 +1,5 @@
 // Service worker de Evaluación 360: primero la red (para no quedarse con versiones viejas); sin señal, la copia guardada.
-const VERSION = 'e360-v2';
+const VERSION = 'e360-v4';
 const ARCHIVOS = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {

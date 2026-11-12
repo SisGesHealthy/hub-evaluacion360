@@ -181,6 +181,14 @@ textarea.entrada { min-height: 120px; }
 .f-extra dt { font-weight: 650; }
 .f-extra dd { margin: 0; white-space: pre-wrap; }
 
+/* ---------- Respuesta del evaluado vista por el jefe ---------- */
+.su-resp { background: #eef7f5; border-left: 4px solid var(--teal); border-radius: 0 12px 12px 0; padding: 12px 16px; margin: 0 0 16px; font-size: 16px; line-height: 1.5; }
+.su-resp > div { white-space: pre-wrap; }
+.su-resp small { display: block; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--teal); margin-bottom: 4px; white-space: normal; }
+.su-resp .btn { margin-top: 10px; white-space: normal; }
+.fichas-par { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.fichas-par .ficha-tres, .fichas-par .ficha-dos { grid-template-columns: 1fr; }
+
 /* ---------- Espejo (sala de acuerdo) ---------- */
 .esp-cab { display: flex; gap: 16px; align-items: center; padding: 20px 22px; }
 .esp-fuentes { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -301,7 +309,7 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
 @media (max-width: 960px) {
   .flujo { grid-template-columns: 1fr; }
   .lateral { position: static; }
-  .miradas, .dos-col, .ficha-dos, .reglas { grid-template-columns: 1fr; }
+  .miradas, .dos-col, .ficha-dos, .reglas, .fichas-par { grid-template-columns: 1fr; }
   .hero .anillo-grande { display: none; }
   .embudo-fila { grid-template-columns: 120px 1fr 50px; }
 }

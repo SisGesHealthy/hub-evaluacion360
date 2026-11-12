@@ -1,0 +1,10 @@
+{
+  "name": "Evaluación 360 · Healthy Food",
+  "short_name": "Evaluación 360",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f2",
+  "theme_color": "#1f7a3d",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

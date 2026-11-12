@@ -1,0 +1,4 @@
+# Datos internos (Manual de Funciones y organigrama): viven en SharePoint, no en el repo público
+datos-manual.js
+datos-personas.js
+__pycache__/
